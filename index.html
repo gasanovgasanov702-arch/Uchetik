@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Система Учета (Cloud Enterprise)</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        /* Светлая тема (переменные) */
+        :root {
+            --primary: #2563eb; --bg: #f8fafc; --card: #ffffff; --text: #1e293b;
+            --danger: #ef4444; --success: #22c55e; --edit: #f59e0b; --info: #0ea5e9;
+            --purple: #8b5cf6; --dark: #334155; --border: #e2e8f0; --th-bg: #f1f5f9;
+            --input-bg: #ffffff;
+        }
+        /* Темная тема (переменные) - ПО УМОЛЧАНИЮ */
+        [data-theme="dark"] {
+            --primary: #3b82f6; --bg: #0f172a; --card: #1e293b; --text: #f1f5f9;
+            --danger: #f87171; --success: #4ade80; --edit: #fbbf24; --info: #38bdf8;
+            --purple: #a78bfa; --dark: #94a3b8; --border: #334155; --th-bg: #0f172a;
+            --input-bg: #0f172a;
+        }
+
+        body { font-family: sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; transition: background 0.3s, color 0.3s; }
+
+        #auth-page { background: var(--card); padding: 2rem; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 90%; max-width: 350px; }
+        .auth-tabs { display: flex; margin-bottom: 15px; border-bottom: 2px solid var(--border); }
+        .auth-tabs div { flex: 1; text-align: center; padding: 10px; cursor: pointer; color: var(--dark); font-weight: bold; }
+        .auth-tabs div.active { color: var(--primary); border-bottom: 2px solid var(--primary); margin-bottom: -2px; }
+
+        input, textarea, select { width: 100%; padding: 10px; margin-top: 5px; margin-bottom: 10px; border: 1px solid var(--border); border-radius: 6px; box-sizing: border-box; font-family: sans-serif; background: var(--input-bg); color: var(--text); }
+        button { cursor: pointer; border: none; border-radius: 6px; padding: 10px; font-weight: bold; transition: 0.2s; }
+        button:hover { opacity: 0.9; }
+        .btn-main { width: 100%; background: var(--primary); color: white; margin-top: 10px; }
+        .btn-small { padding: 5px 10px; font-size: 12px; }
+        .btn-excel { background: #10b981; color: white; display: flex; align-items: center; gap: 5px; }
+
+        #dashboard { display: none; width: 95%; max-width: 1100px; background: var(--card); padding: 20px; border-radius: 15px; margin-top: 20px; align-self: flex-start; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); margin-bottom: 20px; padding-bottom: 10px; }
+        .header-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+
+        .add-btn { background: var(--success); color: white; width: 60px; height: 60px; border-radius: 50%; font-size: 30px; margin: 10px auto; display: block; box-shadow: 0 4px 10px rgba(34, 197, 94, 0.4); }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 15px; }
+        th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
+        th { background: var(--th-bg); position: sticky; top: 0; }
+        .table-container { max-height: 60vh; overflow-y: auto; overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; }
+
+        .btn-del { background: var(--danger); color: white; padding: 5px 8px; font-size: 11px; border-radius: 4px; }
+
+        .btn-edit { background: var(--edit); color: white; padding: 5px 8px; font-size: 11px; border-radius: 4px; margin-left:6px; }
+        .profit-cell { color: var(--success); font-weight: bold; font-size: 15px; }
+
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 100; }
+        .modal-content { background: var(--card); padding: 20px; border-radius: 12px; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto; color: var(--text); }
+        .modal-large { width: 98%; max-width: 1400px; }
+
+        .hidden { display: none !important; }
+
+        .payday-banner { background: #fef08a; color: #854d0e; padding: 15px; border-radius: 8px; text-align: center; font-weight: bold; margin-bottom: 15px; border: 1px solid #eab308; }
+        .notif-card { background: rgba(56, 189, 248, 0.1); border-left: 4px solid var(--info); padding: 15px; margin-bottom: 15px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
+
+        .stats-panel { display: flex; flex-wrap: wrap; gap: 10px; background: var(--bg); padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid var(--border); }
+        .stat-box { flex: 1; min-width: 120px; }
+        .stat-box span { display: block; font-size: 12px; color: var(--dark); }
+        .stat-box strong { font-size: 18px; color: var(--text); }
+        .text-success { color: var(--success) !important; }
+        .text-info { color: var(--info) !important; }
+        .text-danger { color: var(--danger) !important; }
+
+        .filters-row { display: flex; flex-wrap: wrap; gap: 15px; background: var(--bg); padding: 10px 15px; border-radius: 8px; margin-bottom: 15px; align-items: center; border: 1px solid var(--border); }
+        .filter-item { display: flex; align-items: center; gap: 10px; }
+        .filter-item select, .filter-item input { margin: 0; padding: 6px; width: auto; }
+
+        .clickable-name { color: var(--info); text-decoration: underline; cursor: pointer; background: none; border: none; font-size: 14px; padding: 0; font-weight: bold; }
+        .clickable-name:hover { opacity: 0.8; }
+        .badge-debt { background: rgba(239, 68, 68, 0.2); color: var(--danger); padding: 3px 6px; border-radius: 4px; font-size: 11px; margin-left: 5px; border: 1px solid var(--danger); }
+        .badge-paid { background: rgba(34, 197, 94, 0.2); color: var(--success); padding: 3px 6px; border-radius: 4px; font-size: 11px; margin-left: 5px; border: 1px solid var(--success); }
+
+        .warning-text { color: var(--danger); font-size: 13px; font-weight: bold; margin-bottom: 10px; display: block; }
+        .tfoot-totals { background: var(--th-bg); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="auth-page">
+        <div class="auth-tabs">
+            <div id="tab-login" class="active" onclick="switchAuth('login')">Вход</div>
+            <div id="tab-register" onclick="switchAuth('register')">Регистрация</div>
+        </div>
+        
+        <div id="form-login">
+            <input type="text" id="login-user" placeholder="Логин">
+            <input type="password" id="login-pass" placeholder="Пароль">
+            <button class="btn-main" onclick="handleLogin()">Войти</button>
+        </div>
+
+        <div id="form-register" class="hidden">
+            <input type="text" id="reg-user" placeholder="Придумайте Логин">
+            <input type="password" id="reg-pass" placeholder="Придумайте Пароль">
+            <button class="btn-main" style="background: var(--success);" onclick="handleRegister()">Зарегистрироваться</button>
+        </div>
+    </div>
+
+    <div id="dashboard">
+        <div id="payday-banner" class="payday-banner hidden"></div>
+        <div id="user-notifications"></div> <div class="header">
+            <h3 id="welcome-msg" style="margin: 0;">Панель</h3>
+            <div class="header-btns">
+                <button id="btn-delete-header" onclick="openDeleteModal()" style="background:var(--danger); color:white;">🗑️ Удалить</button>
+                <button id="btn-notifs" onclick="openNotifications()" style="background:var(--info); color:white; position:relative;">
+                    🔔
+                    <span id="notif-badge" style="position:absolute; top:-6px; right:-8px; background:var(--danger); color:white; border-radius:50%; padding:2px 6px; font-size:12px; display:none;">0</span>
+                </button>
+                <button onclick="toggleTheme()" style="background: var(--dark); color: white;">🌓 Тема</button>
+                <button id="btn-access" onclick="openAccessModal()" style="background: var(--edit); color: white;" class="hidden">🔓 Доступы</button>
+                <button id="btn-journal" onclick="openAdminJournal()" style="background: var(--primary); color: white;" class="hidden">📓 Журнал Учета</button>
+                <button id="btn-settings" onclick="openSettings()" style="background: #cbd5e1; color: #333;">⚙️ Настройки</button>
+                <button onclick="location.reload()" style="background: #e2e8f0; color: #333;">Выход</button>
+            </div>
+        </div>
+
+        <div class="filters-row">
+ 
+            <div class="filter-item">
+                <strong>Месяц просмотра:</strong>
+                <input type="month" id="month-selector" onchange="renderData()">
+            </div>
+        </div>
+
+        <div id="user-ui" class="hidden">
+            <span id="access-warning" class="warning-text hidden">⚠️ Доступ к этому месяцу закрыт Сефо. Показаны работы только за последние 24 часа.</span>
+            
+            <div class="stats-panel">
+                <div class="stat-box"><span>Заработано (за период):</span><strong id="u-stat-earned" class="text-info">0</strong></div>
+                <div class="stat-box"><span>Авансы (за период):</span><strong id="u-stat-advances" class="text-danger">0</strong></div>
+                <div class="stat-box"><span>К выдаче:</span><strong id="u-stat-balance" class="text-success">0</strong></div>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <button onclick="openRequestAdvance()" style="background:var(--purple); color:white; flex: 1;">💸 Запросить аванс</button>
+            </div>
+
+            <div style="text-align: center;">
+                <button class="add-btn" onclick="openEntryModal()">+</button>
+                <p style="margin-top: 5px; font-weight: bold;">Добавить работу</p>
+            </div>
+            
+            <h4 style="margin-bottom:5px; margin-top:20px;">Ваши записи:</h4>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Дата</th><th>Итог</th><th>Моя ЗП (25%)</th><th>Действия</th></tr></thead>
+                    <tbody id="user-data-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="admin-ui" class="hidden">
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items: center;">
+                <button onclick="openAdminAdvances()" style="background:var(--purple); color:white;">💰 Управление авансами</button>
+                
+                <div class="filter-item" style="margin-left: auto;">
+                    <strong>Сотрудник:</strong>
+                    <select id="main-emp-filter" onchange="renderData()">
+                        <option value="all">Все сотрудники</option>
+                    </select>
+                </div>
+            </div>
+
+            <h4 style="margin-bottom:5px;">Все записи за месяц (Главный экран):</h4>
+            <p style="margin-top:0; margin-bottom:10px; font-size:12px; color:var(--dark);">Пояснения к колонкам: <b>Н</b> — Набор, <b>Р</b> — Распечатка, <b>Ф</b> — Фото. В колонке "ЗП (25%)" отображается 25% от итоговой выручки.</p>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Сотрудник</th><th>Дата</th><th>Набор (Н)</th><th>Распечатка (Р)</th><th>Фото (Ф)</th><th>Общее</th><th>ЗП (25%)</th><th>Прибыль</th></tr></thead>
+                    <tbody id="admin-data-body"></tbody>
+                    <tfoot class="tfoot-totals">
+                        <tr>
+                            <td colspan="5" style="text-align: right;">ИТОГО ПО ТАБЛИЦЕ:</td>
+                            <td id="main-total-revenue" style="color:var(--text)">0</td>
+                            <td id="main-total-salary" style="color:var(--info)">0</td>
+                            <td id="main-total-profit" style="color:var(--text)">0</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-admin-advances" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-top:0;">Управление авансами</h3>
+            <div id="pending-advances-list"></div>
+            <button class="btn-main" style="background:var(--danger); margin-top: 15px;" onclick="closeModal('modal-admin-advances')">Закрыть</button>
+        </div>
+    </div>
+
+    <div id="modal-access" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-top:0;">🔓 Управление доступами</h3>
+            <p style="font-size: 13px; color: var(--dark);">По умолчанию работники видят записи только за 24 часа. Выдайте доступ на месяц, чтобы они увидели полную выручку за этот период.</p>
+            
+            <label>Сотрудник:</label>
+            <select id="access-emp-select"></select>
+            
+            <label>Месяц (Год-Месяц):</label>
+            <input type="month" id="access-month">
+            
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button class="btn-main" style="background:var(--success); margin: 0;" onclick="grantAccess()">Открыть доступ</button>
+                <button class="btn-main" style="background:var(--danger); margin: 0;" onclick="revokeAccess()">Закрыть доступ</button>
+            </div>
+            <hr style="margin: 20px 0; border: 1px solid var(--border);">
+            <button class="btn-main" style="background:var(--dark);" onclick="closeModal('modal-access')">Закрыть</button>
+        </div>
+    </div>
+
+    <div id="modal-delete" class="modal">
+        <div class="modal-content" style="max-width:700px;">
+            <h3 style="margin-top:0; color:var(--danger);">ВНИМАНИЕ — ДЕЙСТВИЕ НЕОБРАТИМО</h3>
+            <p style="font-size:13px; color:var(--dark);">Здесь можно удалить данные за выбранный период или полностью очистить базу. Действия доступны только Сефо. Убедитесь, что выбраны корректные значения в полях "С месяца" и "По месяц".</p>
+            <div style="margin-top:10px; border:1px solid var(--border); padding:10px; border-radius:6px; background: rgba(239,68,68,0.03);">
+                <p style="font-size:13px; color:var(--dark); margin:6px 0;">Удалить данные за период — переместит данные в безопасный бэкап и удалит оригиналы. Восстановление возможно в течение 5 минут.</p>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn-small" style="background:var(--danger); color:white;" onclick="deletePeriodWithBackup()">🗑️ УДАЛИТЬ ДАННЫЕ ПЕРИОДА</button>
+                </div>
+            </div>
+
+            <hr style="margin:12px 0; border:1px dashed var(--border);">
+
+            <div style="margin-top:6px;">
+                <p style="font-size:13px; color:var(--dark);">Удалить всё — создаст полный бэкап и удалит ВСЕ записи, авансы и выплаты. Требуется 3 подтверждения. После удаления будет 5 минут на восстановление.</p>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn-small" style="background:#7f1d1d; color:white;" onclick="deleteEverythingWithBackup()">🧨 УДАЛИТЬ ВСЁ (ОПАСНО)</button>
+                    <button class="btn-small" style="background:var(--dark); color:white;" onclick="closeModal('modal-delete')">Отмена</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-undo" class="modal">
+        <div class="modal-content" style="max-width:500px; text-align:center;">
+            <h3 id="undo-title" style="margin-top:0;">Данные удалены</h3>
+            <p id="undo-msg" style="font-size:13px; color:var(--dark);">У вас есть 5 минут, чтобы восстановить удалённые данные.</p>
+            <div id="undo-timer" style="font-weight:bold; margin-bottom:10px;"></div>
+            <div style="display:flex; gap:10px; justify-content:center;">
+                <button id="btn-undo-restore" class="btn-main" style="max-width:180px; background:var(--info);" onclick="restoreBackup()">Восстановить</button>
+                <button id="btn-undo-final" class="btn-small" style="background:var(--danger); color:white;" onclick="finalizeBackupNow()">Удалить навсегда</button>
+            </div>
+        </div>
+    </div>
+
+  <div id="modal-journal" class="modal">
+        <div class="modal-content modal-large">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">
+                <h2 style="margin:0;">📓 Журнал Учета</h2>
+                <button class="btn-small" style="background:var(--danger); color:white;" onclick="closeModal('modal-journal')">Закрыть</button>
+            </div>
+            
+            <div class="filters-row" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;">
+                <div class="filter-item">
+                    <label style="display:block; font-size:12px;">С месяца:</label>
+                    <input type="month" id="journal-month-start" onchange="renderJournal()">
+                </div>
+                <div class="filter-item">
+                    <label style="display:block; font-size:12px;">По месяц:</label>
+                    <input type="month" id="journal-month-end" onchange="renderJournal()">
+                </div>
+                <div class="filter-item">
+                    <label style="display:block; font-size:12px;">Сотрудник:</label>
+                    <select id="journal-emp-filter" onchange="renderJournal()" style="margin:0;">
+                        <option value="all">Все</option>
+                    </select>
+                </div>
+                <button class="btn-excel" onclick="exportToExcel()" style="height:38px;">📊 Excel</button>
+            </div>
+
+            <p style="font-size: 12px; color: var(--dark); margin-top: 10px;">* Выберите диапазон дат, чтобы увидеть данные.</p>
+
+            <div class="table-container" style="max-height: 70vh;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Сотрудник (Нажмите)</th><th>Зарплата (25%)</th><th>Аванс</th><th>Выдано (ЗП)</th><th>Остаток (Долг)</th><th>Прибыль</th><th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="journal-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-emp-details" class="modal" style="z-index: 105;">
+        <div class="modal-content" style="max-width: 800px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 style="margin:0;" id="detail-emp-name">Карточка</h3>
+                <button class="btn-small" style="background:var(--danger); color:white;" onclick="closeModal('modal-emp-details')">Закрыть</button>
+            </div>
+            
+            <div class="stats-panel" style="gap: 5px;">
+                <div class="stat-box"><span>Месячная выручка:</span><strong id="det-revenue">0</strong></div>
+                <div class="stat-box"><span>Начислено ЗП:</span><strong id="det-salary" class="text-info">0</strong></div>
+                <div class="stat-box"><span>Авансы:</span><strong id="det-advances" style="color:var(--purple)">0</strong></div>
+                <div class="stat-box"><span>Уже выдано:</span><strong id="det-paid" class="text-success">0</strong></div>
+                <div class="stat-box"><span>Текущий долг:</span><strong id="det-debt" class="text-danger">0</strong></div>
+            </div>
+
+            <div id="settlement-container" style="text-align: center; margin-bottom: 15px;"></div>
+
+            <h4>Все работы за выбранный период:</h4>
+            <div class="table-container" style="max-height: 40vh;">
+                <table>
+                    <thead><tr><th>Дата</th><th>Набор</th><th>Распечатка</th><th>Фото</th><th>Итог</th></tr></thead>
+                    <tbody id="det-works-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-payment" class="modal" style="z-index: 110;">
+        <div class="modal-content" style="max-width: 300px;">
+            <h3 style="margin-top:0;" id="pay-title">Выплата</h3>
+            <input type="hidden" id="pay-uid">
+            <input type="hidden" id="pay-type">
+            <label>Сумма выплаты:</label>
+            <input type="number" id="pay-amount">
+            <button class="btn-main" style="background:var(--success);" onclick="processPayment()">Провести выплату</button>
+            <button class="btn-main" style="background:var(--danger);" onclick="closeModal('modal-payment')">Отмена</button>
+        </div>
+    </div>
+
+    <div id="modal-settings" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-top:0;">Настройки аккаунта</h3>
+            <label>Новый логин</label><input type="text" id="set-login">
+            <label>Новый пароль</label><input type="text" id="set-pass">
+            <button class="btn-main" style="background:var(--success);" onclick="saveSettings()">Сохранить изменения</button>
+            <hr style="margin: 20px 0; border: 1px solid var(--border);">
+            <button class="btn-main" style="background:var(--danger);" onclick="deleteAccount()">Удалить аккаунт навсегда</button>
+            <button class="btn-main" style="background:var(--dark);" onclick="closeModal('modal-settings')">Закрыть</button>
+        </div>
+    </div>
+
+    <div id="modal-entry" class="modal">
+        <div class="modal-content">
+            <h3 id="modal-title" style="margin-top:0;">Новая запись</h3>
+            <label>Набор</label><input type="number" id="inp-nabor" value="0" oninput="calcSum()">
+            <label>Распечатка</label><input type="number" id="inp-print" value="0" oninput="calcSum()">
+            <label>Фото</label><input type="number" id="inp-photo" value="0" oninput="calcSum()">
+            <div style="background: var(--bg); padding: 10px; border-radius: 6px; margin: 15px 0; border: 1px solid var(--border);">
+                <p style="margin:0;">Общий Итог: <strong id="auto-total">0</strong></p>
+                <p style="margin:5px 0 0 0; font-size: 14px; color: var(--info);">Моя ЗП (25%): <strong id="auto-salary">0</strong></p>
+            </div>
+            <button class="btn-main" style="background:var(--success);" onclick="saveEntry()">Сохранить</button>
+            <button class="btn-main" style="background:var(--danger);" onclick="closeModal('modal-entry')">Отмена</button>
+        </div>
+    </div>
+
+    <div id="modal-request-adv" class="modal">
+        <div class="modal-content"><h3 style="margin-top:0;">Запрос аванса</h3>
+            <label>Сумма</label><input type="number" id="req-adv-amount">
+            <button class="btn-main" style="background:var(--purple);" onclick="sendAdvanceRequest()">Отправить Сефо</button>
+            <button class="btn-main" style="background:var(--danger);" onclick="closeModal('modal-request-adv')">Отмена</button>
+        </div>
+    </div>
+
+    <script>
+        // --- ТЕМА ---
+        function toggleTheme() {
+            const html = document.documentElement;
+            if(html.getAttribute('data-theme') === 'dark') html.removeAttribute('data-theme');
+            else html.setAttribute('data-theme', 'dark');
+        }
+
+        // --- FIREBASE KEYS ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAbJ813A0jyGWBeCxo1IeplQEYhXquf_p0",
+            authDomain: "myaccounting-1f1df.firebaseapp.com",
+            projectId: "myaccounting-1f1df",
+            storageBucket: "myaccounting-1f1df.firebasestorage.app",
+            messagingSenderId: "97843459471",
+            appId: "1:97843459471:web:537b7a49c00670cfeec7fa",
+            databaseURL: "https://myaccounting-1f1df-default-rtdb.firebaseio.com"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        
+        let currentUser = null;
+        let allUsers = {}; let allEntries = []; let allAdvances = []; let allPayments = []; let allPermissions = {};
+        let editingEntryId = null; // id редактируемой записи, null если новая
+
+        // Инициализация месяца
+        const today = new Date();
+        const currentMonthString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        document.getElementById('month-selector').value = currentMonthString;
+        document.getElementById('journal-month-start').value = currentMonthString;
+        document.getElementById('journal-month-end').value = currentMonthString;
+        document.getElementById('access-month').value = currentMonthString;
+
+        // --- АВТОРИЗАЦИЯ ---
+        function switchAuth(tab) {
+            document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+            document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+            document.getElementById('form-login').classList.toggle('hidden', tab !== 'login');
+            document.getElementById('form-register').classList.toggle('hidden', tab !== 'register');
+        }
+
+        async function handleLogin() {
+            const u = document.getElementById('login-user').value.trim(); const p = document.getElementById('login-pass').value.trim();
+            if(!u || !p) return;
+            if (u === "Сефо" && p === "9090") { currentUser = { id: "admin_sefo", username: "Сефо", role: "admin" }; showDashboard(); return; }
+            db.ref('users').once('value', snapshot => {
+                let found = false; const usersData = snapshot.val();
+                if (usersData) {
+                    for (let id in usersData) {
+                        if (usersData[id].username === u && usersData[id].password === p) {
+                            currentUser = { id: id, ...usersData[id] }; found = true;
+                            db.ref('users/' + id).update({ lastLogin: Date.now() }); break;
+                        }
+                    }
+                }
+                if (found) showDashboard(); else alert("Неверный логин или пароль");
+            });
+        }
+
+        function handleRegister() {
+            const u = document.getElementById('reg-user').value.trim(); const p = document.getElementById('reg-pass').value.trim();
+            if(!u || !p) return;
+            db.ref('users').push({ username: u, password: p, role: "user", lastLogin: Date.now() }).then(() => { alert("Успешно!"); switchAuth('login'); });
+        }
+
+        // --- ЗАГРУЗКА БАЗЫ ---
+        function showDashboard() {
+            document.getElementById('auth-page').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            document.getElementById('welcome-msg').innerText = "Привет, " + currentUser.username;
+            checkPayday();
+
+            if (currentUser.role === 'admin') {
+                document.getElementById('btn-settings').style.display = 'none';
+                document.getElementById('btn-journal').classList.remove('hidden');
+                document.getElementById('btn-access').classList.remove('hidden');
+            } 
+
+            db.ref('users').on('value', snap => { allUsers = snap.val() || {}; updateEmpFilter(); });
+            db.ref('entries').on('value', snap => { const d = snap.val(); allEntries = d ? Object.keys(d).map(k => ({id: k, ...d[k]})) : []; renderData(); });
+            db.ref('advances').on('value', snap => { const d = snap.val(); allAdvances = d ? Object.keys(d).map(k => ({id: k, ...d[k]})) : []; renderData(); if(currentUser.role === 'admin') renderPendingAdvances(); });
+            db.ref('payments').on('value', snap => { const d = snap.val(); allPayments = d ? Object.keys(d).map(k => ({id: k, ...d[k]})) : []; renderData(); renderNotifications(); });
+            db.ref('permissions').on('value', snap => { allPermissions = snap.val() || {}; renderData(); });
+        }
+
+        function checkPayday() {
+            if (today.getDate() === 1) {
+                const banner = document.getElementById('payday-banner'); banner.classList.remove('hidden');
+                banner.innerText = currentUser.role === 'admin' ? "⚠️ Внимание: Сегодня день выдачи ЗП (1-е число)!" : "🎉 Ура! Сегодня день ЗП!";
+            }
+        }
+
+        function updateEmpFilter() {
+            const sels = [document.getElementById('journal-emp-filter'), document.getElementById('main-emp-filter'), document.getElementById('access-emp-select')];
+            let optsAll = '<option value="all">Все сотрудники</option>';
+            let optsJustEmps = '';
+            for(let uid in allUsers) {
+                if(allUsers[uid].role !== 'admin') {
+                    const opt = `<option value="${uid}">${allUsers[uid].username}</option>`;
+                    optsAll += opt; optsJustEmps += opt;
+                }
+            }
+            if(sels[0]) sels[0].innerHTML = optsAll;
+            if(sels[1]) sels[1].innerHTML = optsAll;
+            if(sels[2]) sels[2].innerHTML = optsJustEmps; // Для доступов не нужно "Все"
+        }
+
+        // --- УВЕДОМЛЕНИЯ ПОЛЬЗОВАТЕЛЮ ---
+        function renderNotifications() {
+            const container = document.getElementById('user-notifications'); container.innerHTML = '';
+            // Для обычных пользователей показываем их платежи
+            if (currentUser.role !== 'admin') {
+                const unread = allPayments.filter(p => p.userId === currentUser.id && p.read === false);
+                unread.forEach(p => {
+                    const typeText = p.type === 'salary' ? 'Зарплату' : 'Расчет (погашение долга)';
+                    container.innerHTML += `
+                        <div class="notif-card">
+                            <div><b>Внимание!</b> Сефо выдал вам ${typeText} в размере <b>${p.amount} тг</b>.</div>
+                            <button class="btn-small" style="background:var(--success); color:white; margin:0;" onclick="markRead('${p.id}')">Понятно</button>
+                        </div>`;
+                });
+            }
+
+            // Для администратора (Сефо) считаем запросы аванса и показываем бейдж
+            if (currentUser.role === 'admin') {
+                const pending = allAdvances.filter(a => a.status === 'pending').length;
+                const badge = document.getElementById('notif-badge');
+                if (pending > 0) { badge.style.display = 'inline-block'; badge.innerText = pending; }
+                else { badge.style.display = 'none'; }
+            } else {
+                // скрываем бейдж для обычных пользователей, если нет уведомлений
+                const badge = document.getElementById('notif-badge'); if (badge) badge.style.display = 'none';
+            }
+        }
+        function markRead(pid) { db.ref('payments/' + pid).update({ read: true }); }
+
+        function openNotifications() {
+            if (!currentUser) return;
+            if (currentUser.role === 'admin') {
+                // открыть управление авансами
+                openAdminAdvances();
+            } else {
+                // прокрутить к блоку уведомлений пользователя
+                const container = document.getElementById('user-notifications');
+                if (container) {
+                    container.scrollIntoView({ behavior: 'smooth' });
+                    container.classList.remove('hidden');
+                }
+            }
+        }
+
+        // --- ОТРИСОВКА ГЛАВНОЙ ПАНЕЛИ ---
+        function renderData() {
+            const selectedMonth = document.getElementById('month-selector').value;
+
+            if (currentUser.role === 'admin') {
+                document.getElementById('admin-ui').classList.remove('hidden');
+                const mainEmp = document.getElementById('main-emp-filter').value;
+                
+                let sumTotal = 0; let sumSalary = 0;
+                const body = document.getElementById('admin-data-body'); body.innerHTML = '';
+                
+                const filteredEntries = allEntries.filter(e => {
+                    if(!e.isoDate || !e.isoDate.startsWith(selectedMonth)) return false;
+                    if(mainEmp !== 'all' && e.userId !== mainEmp) return false;
+                    return true;
+                });
+
+                if (mainEmp === 'all') {
+                    // Группируем по сотрудникам (СВОРАЧИВАЮЩИЙСЯ СПИСОК)
+                    let grouped = {};
+                    filteredEntries.sort((a,b) => b.timestamp - a.timestamp).forEach(item => {
+                        if(!grouped[item.userId]) grouped[item.userId] = { total: 0, salary: 0, entries: [] };
+                        grouped[item.userId].entries.push(item);
+                        grouped[item.userId].total += item.total;
+                        grouped[item.userId].salary += (item.total * 0.25);
+                        sumTotal += item.total; sumSalary += (item.total * 0.25);
+                    });
+
+                    for(let uid in grouped) {
+                        let g = grouped[uid];
+                        const uname = allUsers[uid] ? allUsers[uid].username : "Удален";
+                        // Заголовок сотрудника
+                        body.innerHTML += `<tr style="background: var(--th-bg); cursor: pointer;" onclick="toggleRows('rows-${uid}')">
+                            <td colspan="5" style="font-size: 14px;"><b>▶ ${uname}</b> (Всего работ: ${g.entries.length})</td>
+                            <td><b>${g.total}</b></td>
+                            <td style="color:var(--info)"><b>${g.salary}</b></td>
+                            <td class="profit-cell"><b>${(g.total - g.salary).toFixed(2)}</b></td>
+                        </tr>`;
+                        // Скрытые детали
+                        g.entries.forEach(item => {
+                            const profitItem = (item.total - (item.total * 0.25));
+                            body.innerHTML += `<tr class="rows-${uid} hidden" style="background: var(--bg);">
+                                <td style="padding-left: 20px;">└</td>
+                                <td>${item.date}</td><td>${item.nabor}</td><td>${item.print}</td><td>${item.photo}</td>
+                                <td>${item.total}</td><td style="color:var(--info)">${(item.total * 0.25).toFixed(2)}</td><td class="profit-cell">${profitItem.toFixed(2)}</td>
+                            </tr>`;
+                        });
+                    }
+                } else {
+                    // Обычный список для одного сотрудника
+                    filteredEntries.sort((a,b) => b.timestamp - a.timestamp).forEach(item => {
+                        const salary = item.total * 0.25; const profitItem = item.total - salary; sumTotal += item.total; sumSalary += salary;
+                        const uname = allUsers[item.userId] ? allUsers[item.userId].username : "Удален";
+                        body.innerHTML += `<tr><td><b>${uname}</b></td><td>${item.date}</td><td>${item.nabor}</td><td>${item.print}</td><td>${item.photo}</td><td><b>${item.total}</b></td><td style="color:var(--info)">${salary}</td><td class="profit-cell">${profitItem}</td></tr>`;
+                    });
+                }
+                
+                document.getElementById('main-total-revenue').innerText = sumTotal;
+                document.getElementById('main-total-salary').innerText = sumSalary;
+                document.getElementById('main-total-profit').innerText = (sumTotal - sumSalary);
+
+            } else {
+                document.getElementById('user-ui').classList.remove('hidden');
+                
+                // Проверка прав на выбранный месяц
+                const hasAccess = allPermissions[currentUser.id] && allPermissions[currentUser.id][selectedMonth];
+                const warningMsg = document.getElementById('access-warning');
+                const twentyFourHours = 24 * 60 * 60 * 1000;
+                const now = Date.now();
+
+                let earned = 0; let advancesThisMonth = 0;
+                const body = document.getElementById('user-data-body'); body.innerHTML = '';
+
+                const myEntries = allEntries.filter(e => {
+                    if (e.userId !== currentUser.id) return false;
+                    if (hasAccess) {
+                        return e.isoDate && e.isoDate.startsWith(selectedMonth); // Весь месяц
+                    } else {
+                        return (now - e.timestamp) <= twentyFourHours; // Только 24 часа
+                    }
+                });
+
+                if (hasAccess) warningMsg.classList.add('hidden');
+                else warningMsg.classList.remove('hidden');
+
+                myEntries.sort((a,b) => b.timestamp - a.timestamp).forEach(item => {
+                    const salary = item.total * 0.25; earned += salary;
+                    body.innerHTML += `<tr><td>${item.date}</td><td>${item.total}</td><td style="color:var(--info); font-weight:bold;">${salary}</td><td><button class="btn-del" onclick="deleteEntry('${item.id}')">✖</button><button class="btn-edit" onclick="openEditEntry('${item.id}')">✏️</button></td></tr>`;
+                });
+
+                // Авансы считаем так же: если есть доступ - за месяц, если нет - за 24ч (или вообще 0)
+                allAdvances.forEach(adv => {
+                    if (adv.userId === currentUser.id && adv.status === 'approved') {
+                        if (hasAccess) {
+                            if (new Date(adv.timestamp).toISOString().slice(0, 7) === selectedMonth) advancesThisMonth += Number(adv.amount);
+                        } else {
+                            if ((now - adv.timestamp) <= twentyFourHours) advancesThisMonth += Number(adv.amount);
+                        }
+                    }
+                });
+
+                document.getElementById('u-stat-earned').innerText = earned; 
+                document.getElementById('u-stat-advances').innerText = advancesThisMonth; 
+                document.getElementById('u-stat-balance').innerText = earned - advancesThisMonth;
+            }
+        }
+
+        // --- УПРАВЛЕНИЕ ДОСТУПАМИ (СЕФО) ---
+        function openAccessModal() { document.getElementById('modal-access').style.display = 'flex'; }
+        function grantAccess() {
+            const uid = document.getElementById('access-emp-select').value; const m = document.getElementById('access-month').value;
+            if(!uid || !m) return;
+            db.ref(`permissions/${uid}/${m}`).set(true).then(() => alert('Доступ открыт!'));
+        }
+        function revokeAccess() {
+            const uid = document.getElementById('access-emp-select').value; const m = document.getElementById('access-month').value;
+            if(!uid || !m) return;
+            db.ref(`permissions/${uid}/${m}`).remove().then(() => alert('Доступ закрыт!'));
+        }
+
+        // --- АВАНСЫ ---
+        function openRequestAdvance() { document.getElementById('req-adv-amount').value = ""; document.getElementById('modal-request-adv').style.display = 'flex'; }
+        function sendAdvanceRequest() {
+            const a = document.getElementById('req-adv-amount').value; if(!a) return;
+            db.ref('advances').push({ userId: currentUser.id, amount: a, status: 'pending', timestamp: Date.now() }).then(() => { closeModal('modal-request-adv'); alert("Отправлено Сефо."); });
+        }
+        function openAdminAdvances() { document.getElementById('modal-admin-advances').style.display = 'flex'; renderPendingAdvances();}
+        function renderPendingAdvances() {
+            const list = document.getElementById('pending-advances-list'); list.innerHTML = '';
+            let count = 0;
+            allAdvances.forEach(adv => {
+                if(adv.status === 'pending') {
+                    count++;
+                    const un = allUsers[adv.userId] ? allUsers[adv.userId].username : "Удален";
+                    list.innerHTML += `<div style="border:1px solid var(--border); padding:10px; margin-bottom:5px; border-radius:6px; display:flex; justify-content:space-between; align-items:center;">
+                        <span><b>${un}</b> просит: <b>${adv.amount} тг</b></span>
+                        <div>
+                            <button class="btn-small" style="background:var(--success); color:white;" onclick="approveAdv('${adv.id}')">✔ Одобрить</button>
+                            <button class="btn-small" style="background:var(--danger); color:white;" onclick="rejectAdv('${adv.id}')">✖ Отказать</button>
+                        </div>
+                    </div>`;
+                }
+            });
+            if(count === 0) list.innerHTML = "<p>Нет новых запросов.</p>";
+        }
+        function approveAdv(id) { db.ref('advances/' + id).update({status: 'approved'}); }
+        function rejectAdv(id) { db.ref('advances/' + id).remove(); }
+
+        // --- ЖУРНАЛ СЕФО ---
+        function openAdminJournal() { document.getElementById('modal-journal').style.display = 'flex'; renderJournal(); }
+
+        function renderJournal() {
+    const startM = document.getElementById('journal-month-start').value; 
+    const endM = document.getElementById('journal-month-end').value || startM;
+    const jEmp = document.getElementById('journal-emp-filter').value;
+    const tbody = document.getElementById('journal-body'); 
+    tbody.innerHTML = '';
+
+    if (!startM) return;
+
+    for (let uid in allUsers) {
+        if (jEmp !== 'all' && jEmp !== uid) continue;
+
+        let totalRev = 0; let salary25 = 0; let advance = 0; let paid = 0;
+
+        // Фильтр по диапазону месяцев — считаем общую выручку по сотруднику
+        allEntries.forEach(e => { 
+            if (e.userId === uid && e.isoDate && e.isoDate.slice(0, 7) >= startM && e.isoDate.slice(0, 7) <= endM) {
+                totalRev += Number(e.total || 0);
+                salary25 += Number(e.total || 0) * 0.25;
+            }
+        });
+        allAdvances.forEach(a => {
+            const aMonth = new Date(a.timestamp).toISOString().slice(0, 7);
+            if (a.userId === uid && a.status === 'approved' && aMonth >= startM && aMonth <= endM) {
+                advance += Number(a.amount);
+            }
+        });
+        allPayments.forEach(p => { 
+            if (p.userId === uid && p.month >= startM && p.month <= endM) {
+                paid += Number(p.amount); 
+            }
+        });
+
+        const profit = totalRev - salary25; // компания/Сефо получает 75%
+        // у Сефо показываем его заработок (прибыль), у работников показываем 25%
+        const salaryCell = (allUsers[uid] && allUsers[uid].username === 'Сефо') ? profit : salary25;
+        const balance = salaryCell - advance - paid;
+        let statusBadge = balance === 0 && salaryCell > 0 ? `<span class="badge-paid">✔ Расчет выдан</span>` : 
+                          balance > 0 ? `<span class="badge-debt">🔴 Долг: ${balance}</span>` : "";
+
+        tbody.innerHTML += `<tr>
+            <td><button class="clickable-name" onclick="openUserDetails('${uid}', '${startM}', '${endM}', ${salaryCell}, ${balance}, ${advance}, ${paid})">${allUsers[uid] ? allUsers[uid].username : 'Удален'}</button> ${statusBadge}</td>
+            <td style="color:var(--info)">${salaryCell}</td>
+            <td style="color:var(--purple)">${advance}</td>
+            <td style="color:var(--success)">${paid}</td>
+            <td style="font-weight:bold; color: ${balance > 0 ? 'var(--danger)' : 'var(--text)'};">${balance}</td>
+            <td class="profit-cell">${profit}</td>
+            <td><button class="btn-small" style="background:var(--info); color:white;" onclick="openPaymentModal('${uid}', 'salary', ${balance})">Ввести 'Выдано'</button></td>
+        </tr>`;
+    }
+}
+
+        async function resetPeriodData() {
+            // Получаем значения из новых полей
+            const startM = document.getElementById('journal-month-start').value;
+            const endM = document.getElementById('journal-month-end').value || startM;
+
+            if (!startM) {
+                alert("Пожалуйста, выберите 'С месяца' в фильтрах журнала!");
+                return;
+            }
+
+            const confirmFirst = confirm(`ВНИМАНИЕ! Удалить ВСЁ за период с ${startM} по ${endM}?`);
+            if (!confirmFirst) return;
+
+            const confirmSecond = confirm("Это удалит работы, авансы и выплаты навсегда. Вы точно уверены?");
+            if (!confirmSecond) return;
+
+            // Удаление записей о работах
+            allEntries.forEach(e => {
+                if (e.isoDate && e.isoDate.slice(0, 7) >= startM && e.isoDate.slice(0, 7) <= endM) {
+                    db.ref('entries/' + e.id).remove();
+                }
+            });
+            // Удаление авансов
+            allAdvances.forEach(a => {
+                const aMonth = new Date(a.timestamp).toISOString().slice(0, 7);
+                if (aMonth >= startM && aMonth <= endM) {
+                    db.ref('advances/' + a.id).remove();
+                }
+            });
+            // Удаление выплат
+            allPayments.forEach(p => {
+                if (p.month >= startM && p.month <= endM) {
+                    db.ref('payments/' + p.id).remove();
+                }
+            });
+
+            alert("Данные за выбранный период успешно удалены.");
+            closeModal('modal-journal');
+        }
+
+        // --- КАРТОЧКА СОТРУДНИКА ---
+        function openUserDetails(uid, startM, endM, earned, balance, advance, paid) {
+            const uname = allUsers[uid].username;
+            const periodStr = startM === endM ? startM : `${startM} - ${endM}`;
+            document.getElementById('detail-emp-name').innerText = `Карточка: ${uname} (${periodStr})`;
+            
+            // Правильный фильтр по диапазону месяцев
+            let empEntries = allEntries.filter(e => e.userId === uid && e.isoDate.slice(0, 7) >= startM && e.isoDate.slice(0, 7) <= endM);
+            
+            let totalRev = 0; const tbody = document.getElementById('det-works-body'); tbody.innerHTML = '';
+            empEntries.sort((a,b) => b.timestamp - a.timestamp).forEach(e => {
+                totalRev += e.total;
+                tbody.innerHTML += `<tr><td>${e.date}</td><td>${e.nabor}</td><td>${e.print}</td><td>${e.photo}</td><td><b>${e.total}</b></td></tr>`;
+            });
+            
+            document.getElementById('det-revenue').innerText = totalRev; 
+            document.getElementById('det-salary').innerText = earned; 
+            document.getElementById('det-advances').innerText = advance;
+            document.getElementById('det-paid').innerText = paid;
+            document.getElementById('det-debt').innerText = balance;
+
+            const btnCont = document.getElementById('settlement-container');
+            if (balance > 0) {
+                btnCont.innerHTML = `<button class="btn-main" style="background:var(--danger); font-size: 16px; padding: 15px;" onclick="processDirectSettlement('${uid}', ${balance})">⚡ Выдать Расчет (Погасить долг: ${balance} тг)</button>`;
+            } else { 
+                btnCont.innerHTML = `<p style="color:var(--success); font-weight:bold;">✅ Расчет полностью выдан. Долгов нет.</p>`; 
+            }
+            document.getElementById('modal-emp-details').style.display = 'flex';
+        }
+
+            // --- УДАЛЕНИЕ С БЭКАПОМ И ВОССТАНОВЛЕНИЕМ ---
+            let lastBackupId = null; let undoTimeoutHandle = null; let undoIntervalHandle = null;
+
+            function openDeleteModal() {
+                if (!currentUser || currentUser.username !== 'Сефо') return alert('Доступно только Сефо');
+                document.getElementById('modal-delete').style.display = 'flex';
+            }
+
+            async function deletePeriodWithBackup() {
+                if (!currentUser || currentUser.username !== 'Сефо') return alert('Доступно только Сефо');
+                const startM = document.getElementById('journal-month-start').value;
+                const endM = document.getElementById('journal-month-end').value || startM;
+                if (!startM) return alert('Выберите период (С месяца)!');
+                if (!confirm(`ВНИМАНИЕ! Удалить ВСЁ за период с ${startM} по ${endM}?`)) return;
+                if (!confirm('Подтвердите удаление за выбранный период ещё раз.')) return;
+
+                const backupId = 'bak_' + Date.now();
+                const backupRef = db.ref('trash/backups/' + backupId);
+                const meta = { type: 'period', startM, endM, createdBy: currentUser.id, ts: Date.now() };
+                await backupRef.child('meta').set(meta);
+
+                // backup and delete entries
+                for (const e of allEntries) {
+                    if (e.isoDate && e.isoDate.slice(0,7) >= startM && e.isoDate.slice(0,7) <= endM) {
+                        await backupRef.child('entries/' + e.id).set(e);
+                        await db.ref('entries/' + e.id).remove();
+                    }
+                }
+                for (const a of allAdvances) {
+                    const aMonth = new Date(a.timestamp).toISOString().slice(0,7);
+                    if (aMonth >= startM && aMonth <= endM) {
+                        await backupRef.child('advances/' + a.id).set(a);
+                        await db.ref('advances/' + a.id).remove();
+                    }
+                }
+                for (const p of allPayments) {
+                    if (p.month >= startM && p.month <= endM) {
+                        await backupRef.child('payments/' + p.id).set(p);
+                        await db.ref('payments/' + p.id).remove();
+                    }
+                }
+
+                lastBackupId = backupId;
+                showUndoModal(backupId);
+                closeModal('modal-delete'); renderJournal();
+            }
+
+            async function deleteEverythingWithBackup() {
+                if (!currentUser || currentUser.username !== 'Сефо') return alert('Доступно только Сефо');
+                // Тройное подтверждение
+                if (!confirm('Удалить ВСЁ? Это очень опасно. Подтверждаете?')) return;
+                if (!confirm('Вы точно уверены? Ещё одно подтверждение.')) return;
+                if (!confirm('Последний шанс. Удалить всё?')) return;
+
+                const backupId = 'bak_' + Date.now();
+                const backupRef = db.ref('trash/backups/' + backupId);
+                const meta = { type: 'all', createdBy: currentUser.id, ts: Date.now() };
+                await backupRef.child('meta').set(meta);
+
+                // backup all entries, advances, payments
+                for (const e of allEntries) {
+                    await backupRef.child('entries/' + e.id).set(e);
+                    await db.ref('entries/' + e.id).remove();
+                }
+                for (const a of allAdvances) {
+                    await backupRef.child('advances/' + a.id).set(a);
+                    await db.ref('advances/' + a.id).remove();
+                }
+                for (const p of allPayments) {
+                    await backupRef.child('payments/' + p.id).set(p);
+                    await db.ref('payments/' + p.id).remove();
+                }
+
+                lastBackupId = backupId;
+                showUndoModal(backupId);
+                closeModal('modal-delete'); renderJournal();
+            }
+
+            function showUndoModal(backupId) {
+                if (!backupId) return;
+                document.getElementById('modal-undo').style.display = 'flex';
+                let seconds = 300; // 5 minutes
+                document.getElementById('undo-timer').innerText = formatSeconds(seconds);
+                undoIntervalHandle = setInterval(() => {
+                    seconds -= 1;
+                    document.getElementById('undo-timer').innerText = formatSeconds(seconds);
+                    if (seconds <= 0) {
+                        clearInterval(undoIntervalHandle); undoIntervalHandle = null;
+                        // finalize backup (delete backup) to prevent restore
+                        finalizeBackup(backupId);
+                        document.getElementById('undo-msg').innerText = 'Время восстановления истекло.';
+                        document.getElementById('btn-undo-restore').style.display = 'none';
+                    }
+                }, 1000);
+
+                // schedule final removal after 5 minutes (client-side attempt)
+                undoTimeoutHandle = setTimeout(() => {
+                    finalizeBackup(backupId);
+                }, 300000);
+            }
+
+            function formatSeconds(s) {
+                const m = Math.floor(s/60); const sec = s % 60;
+                return `${m}:${String(sec).padStart(2,'0')}`;
+            }
+
+            async function restoreBackup() {
+                if (!lastBackupId) return alert('Нет активного бэкапа для восстановления');
+                const bRef = db.ref('trash/backups/' + lastBackupId);
+                const snap = await bRef.get();
+                if (!snap.exists()) return alert('Бэкап не найден или уже удалён');
+                const data = snap.val();
+                // restore entries
+                if (data.entries) {
+                    for (const id in data.entries) {
+                        await db.ref('entries/' + id).set(data.entries[id]);
+                    }
+                }
+                if (data.advances) {
+                    for (const id in data.advances) {
+                        await db.ref('advances/' + id).set(data.advances[id]);
+                    }
+                }
+                if (data.payments) {
+                    for (const id in data.payments) {
+                        await db.ref('payments/' + id).set(data.payments[id]);
+                    }
+                }
+                // удаляем бэкап
+                await db.ref('trash/backups/' + lastBackupId).remove();
+                if (undoIntervalHandle) clearInterval(undoIntervalHandle); if (undoTimeoutHandle) clearTimeout(undoTimeoutHandle);
+                lastBackupId = null;
+                closeModal('modal-undo'); renderJournal(); alert('Данные восстановлены');
+            }
+
+            async function finalizeBackup(backupId) {
+                try {
+                    await db.ref('trash/backups/' + backupId).remove();
+                } catch (e) { console.error(e); }
+            }
+
+            async function finalizeBackupNow() {
+                if (!lastBackupId) return alert('Нет активного бэкапа');
+                if (!confirm('Удалить бэкап и окончательно удалить данные?')) return;
+                await finalizeBackup(lastBackupId);
+                if (undoIntervalHandle) clearInterval(undoIntervalHandle); if (undoTimeoutHandle) clearTimeout(undoTimeoutHandle);
+                lastBackupId = null; closeModal('modal-undo'); alert('Бэкап удалён. Восстановление недоступно.');
+            }
+
+        function openEditEntry(id) {
+            const e = allEntries.find(x => x.id === id);
+            if (!e) return alert('Запись не найдена');
+            editingEntryId = id;
+            document.getElementById('modal-title').innerText = 'Редактировать запись';
+            document.getElementById('inp-nabor').value = e.nabor || 0;
+            document.getElementById('inp-print').value = e.print || 0;
+            document.getElementById('inp-photo').value = e.photo || 0;
+            calcSum();
+            document.getElementById('modal-entry').style.display = 'flex';
+        }
+
+        function processDirectSettlement(uid, amount) {
+            if(!confirm(`Выдать расчет сотруднику и погасить долг ${amount} тг?`)) return;
+            const jMonth = document.getElementById('journal-month-start')?.value || document.getElementById('month-selector')?.value;
+            if(!jMonth) return alert('Выберите месяц в фильтре журнала!');
+            db.ref('payments').push({ userId: uid, amount: Number(amount), type: 'settlement', month: jMonth, timestamp: Date.now(), read: false }).then(() => {
+                closeModal('modal-emp-details'); renderJournal(); alert("Расчет успешно проведен!");
+            });
+        }
+
+        // --- ВЫПЛАТЫ ЗП ---
+        function openPaymentModal(uid, type, suggestedAmount) {
+            document.getElementById('pay-uid').value = uid; document.getElementById('pay-type').value = type;
+            document.getElementById('pay-title').innerText = "Выдача ЗП";
+            document.getElementById('pay-amount').value = (typeof suggestedAmount !== 'undefined' && suggestedAmount !== null) ? suggestedAmount : "";
+            document.getElementById('modal-payment').style.display = 'flex';
+        }
+        function processPayment() {
+            const uid = document.getElementById('pay-uid').value; const type = document.getElementById('pay-type').value;
+            const amount = Number(document.getElementById('pay-amount').value);
+            const jMonth = document.getElementById('journal-month-start')?.value || document.getElementById('month-selector')?.value;
+            if (!amount || amount <= 0) return alert("Введите сумму");
+            if (!jMonth) return alert('Выберите месяц в фильтре журнала!');
+            db.ref('payments').push({ userId: uid, amount: amount, type: type, month: jMonth, timestamp: Date.now(), read: false }).then(() => {
+                closeModal('modal-payment'); renderJournal(); alert('Выплата зарегистрирована!');
+            });
+        }
+
+        // --- EXCEL ---
+        function exportToExcel() {
+        const startM = document.getElementById('journal-month-start').value;
+        const endM = document.getElementById('journal-month-end').value || startM;
+        const jEmp = document.getElementById('journal-emp-filter').value;
+    
+        let excelData = [["Сотрудник", "Дата Работы", "Набор", "Распечатка", "Фото", "Общая Выручка", "Зарплата (25%)", "Прибыль"]];
+    
+        for (let uid in allUsers) {
+            // включаем всех сотрудников (в том числе Сефо)
+            if (jEmp !== 'all' && jEmp !== uid) continue;
+        
+            let empEntries = allEntries.filter(e => e.userId === uid && e.isoDate && e.isoDate.slice(0, 7) >= startM && e.isoDate.slice(0, 7) <= endM);
+            let empTotal = 0; let empSal = 0; let empProfit = 0;
+        
+            empEntries.sort((a,b) => a.timestamp - b.timestamp).forEach(e => {
+                let salDay = Number(e.total || 0) * 0.25; let profitDay = Number(e.total || 0) - salDay; empTotal += Number(e.total || 0); empSal += salDay; empProfit += profitDay;
+                excelData.push([allUsers[uid] ? allUsers[uid].username : 'Удален', e.date, e.nabor, e.print, e.photo, e.total, salDay, profitDay]);
+            });
+        
+            if (empEntries.length > 0) { 
+                excelData.push(["ИТОГО ЗА ПЕРИОД (" + (allUsers[uid] ? allUsers[uid].username : 'Удален') + ")", "", "", "", "", empTotal, empSal, empProfit]); 
+                excelData.push([]); 
+            }
+        }
+    
+        if(excelData.length <= 1) return alert("Нет данных за этот период.");
+        const worksheet = XLSX.utils.aoa_to_sheet(excelData); 
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Отчет"); 
+
+        // попытка стилизовать столбец 'Прибыль' зелёным и чуть больше шрифт (клиентская поддержка стилей зависит от библиотеки)
+        try {
+            const profitCol = 'H';
+            for (let r = 1; r <= excelData.length; r++) {
+                const cellRef = profitCol + r;
+                if (worksheet[cellRef]) {
+                    worksheet[cellRef].s = { font: { sz: 14, color: { rgb: "FF22C55E" }, bold: true } };
+                }
+            }
+        } catch (e) { /* не критично если стили не применились */ }
+
+        XLSX.writeFile(workbook, `Отчет_Сефо_${startM}_${endM}.xlsx`);
+    }
+
+        // --- ПРОЧЕЕ ---
+        function openSettings() {
+            document.getElementById('set-login').value = currentUser.username; document.getElementById('set-pass').value = currentUser.password;
+            document.getElementById('modal-settings').style.display = 'flex';
+        }
+        function saveSettings() {
+            const nu = document.getElementById('set-login').value.trim(); const np = document.getElementById('set-pass').value.trim();
+            db.ref('users/' + currentUser.id).update({ username: nu, password: np }).then(() => { currentUser.username = nu; currentUser.password = np; document.getElementById('welcome-msg').innerText = "Привет, " + nu; closeModal('modal-settings'); alert("Обновлено!"); });
+        }
+        function deleteAccount() {
+            // Только Сефо может удалять аккаунты
+            if (!currentUser || currentUser.username !== 'Сефо') {
+                return alert('Удаление аккаунта доступно только Сефо. Обратитесь к администратору.');
+            }
+            if(confirm("Аккаунт удалится навсегда. Уверены?")) db.ref('users/' + currentUser.id).remove().then(() => location.reload());
+        }
+
+        function openEntryModal() {
+            editingEntryId = null;
+            document.getElementById('modal-title').innerText = 'Новая запись';
+            document.getElementById('inp-nabor').value = 0; document.getElementById('inp-print').value = 0; document.getElementById('inp-photo').value = 0; calcSum();
+            document.getElementById('modal-entry').style.display = 'flex';
+        }
+        function calcSum() {
+            const t = (+document.getElementById('inp-nabor').value) + (+document.getElementById('inp-print').value) + (+document.getElementById('inp-photo').value);
+            document.getElementById('auto-total').innerText = t; document.getElementById('auto-salary').innerText = t * 0.25;
+        }
+        function saveEntry() {
+            const t = (+document.getElementById('inp-nabor').value) + (+document.getElementById('inp-print').value) + (+document.getElementById('inp-photo').value);
+            const now = new Date();
+            const entryData = { userId: currentUser.id, nabor: +document.getElementById('inp-nabor').value, print: +document.getElementById('inp-print').value, photo: +document.getElementById('inp-photo').value, total: t, date: now.toLocaleDateString('ru-RU'), isoDate: now.toISOString().split('T')[0], timestamp: Date.now() };
+            if (editingEntryId) {
+                // Обновляем существующую запись
+                db.ref('entries/' + editingEntryId).update(entryData).then(() => { editingEntryId = null; closeModal('modal-entry'); renderData(); });
+            } else {
+                db.ref('entries').push(entryData).then(() => closeModal('modal-entry'));
+            }
+        }
+        function deleteEntry(id) { if (confirm("Удалить?")) db.ref('entries/' + id).remove(); }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+        function deleteAllInRange() {
+    const startM = document.getElementById('journal-month-start').value;
+    const endM = document.getElementById('journal-month-end').value || startM;
+    if (!startM) return alert("Выберите период!");
+
+    if (!confirm(`ВНИМАНИЕ! Вы собираетесь удалить ВСЕ ЗАПИСИ (работы, авансы, выплаты) за период с ${startM} по ${endM}.\n\nЭто действие необратимо! Вы уверены?`)) return;
+
+    // 1. Удаляем записи (entries)
+    allEntries.forEach(e => {
+        if (e.isoDate.slice(0, 7) >= startM && e.isoDate.slice(0, 7) <= endM) {
+            db.ref('entries/' + e.id).remove();
+        }
+    });
+
+    // 2. Удаляем авансы (advances)
+    allAdvances.forEach(a => {
+        const aMonth = new Date(a.timestamp).toISOString().slice(0, 7);
+        if (aMonth >= startM && aMonth <= endM) {
+            db.ref('advances/' + a.id).remove();
+        }
+    });
+
+    // 3. Удаляем выплаты (payments)
+    allPayments.forEach(p => {
+        if (p.month >= startM && p.month <= endM) {
+            db.ref('payments/' + p.id).remove();
+        }
+    });
+
+    alert("Данные за период успешно удалены!");
+    closeModal('modal-journal');
+}
+
+        function deleteEverything() {
+            // Только Сефо может удалить всё
+            if (!currentUser || currentUser.username !== 'Сефо') return alert('Удаление всех данных доступно только Сефо.');
+            if (!confirm('Крайне ОПАСНО: это удалит все работы, авансы и выплаты в базе. Продолжить?')) return;
+            const secret = prompt('Для подтверждения введите слово DELETE (заглавными буквами)');
+            if (secret !== 'DELETE') return alert('Подтверждение не пройдено. Операция отменена.');
+
+            allEntries.forEach(e => db.ref('entries/' + e.id).remove());
+            allAdvances.forEach(a => db.ref('advances/' + a.id).remove());
+            allPayments.forEach(p => db.ref('payments/' + p.id).remove());
+
+            alert('Вся финансовая информация удалена.');
+            closeModal('modal-journal');
+        }
+
+        function toggleRows(className) {
+            const rows = document.querySelectorAll('.' + className);
+            rows.forEach(r => r.classList.toggle('hidden'));
+        }
+        
+
+    </script>
+</body>
+</html>
